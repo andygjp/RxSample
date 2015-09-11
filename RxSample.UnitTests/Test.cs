@@ -22,8 +22,8 @@
 
             var testScheduler = new TestScheduler();
 
-            _sut = new MainWindowViewModel(_service, testScheduler);
-            _sut.GetNames();
+            _sut = new MainWindowViewModel(AsyncMethod.OnScheduler, _service, testScheduler);
+            _sut.Initialize();
 
             // The service has been subscribed to and everything is setup - just need kick it off
             testScheduler.Start();

@@ -29,7 +29,7 @@
             DataContext = new MainWindowViewModel(asyncMethod);
         }
 
-        public new MainWindowViewModel DataContext
+        public new IMainWindowViewModel DataContext
         {
             get { return (MainWindowViewModel) base.DataContext; }
             set { base.DataContext = value; }
@@ -38,28 +38,8 @@
         protected override void OnActivated(EventArgs e)
         {
             base.OnActivated(e);
-            DataContext.GetNames();
+            DataContext.Initialize();
         }
-    }
-
-    public enum AsyncMethod
-    {
-        Synchronous,
-        NoAwait,
-        OnWorkerThread,
-        OnScheduler,
-        OnSchedulerHandleErrors,
-        OnSchedulerNoErrorHandling
-    }
-
-    public interface IMainWindowViewModel
-    {
-        ObservableCollection<string> Names { get; }
-    }
-
-    public class DesignTimeMainWindowViewModel : IMainWindowViewModel
-    {
-        public ObservableCollection<string> Names { get; } = new ObservableCollection<string> {"Hello", "World"};
     }
 
     public class MainWindowViewModel : IMainWindowViewModel
@@ -69,10 +49,10 @@
         private readonly AsyncMethod _asyncMethod;
 
         public MainWindowViewModel(AsyncMethod asyncMethod)
-            : this(new NameService(), DispatcherScheduler.Current, asyncMethod)
+            : this(asyncMethod, new NameService(), DispatcherScheduler.Current)
         { }
 
-        public MainWindowViewModel(INameService service, IScheduler scheduler, AsyncMethod asyncMethod = AsyncMethod.OnScheduler)
+        public MainWindowViewModel(AsyncMethod asyncMethod, INameService service, IScheduler scheduler)
         {
             _service = service;
             _scheduler = scheduler;
@@ -81,7 +61,7 @@
 
         public ObservableCollection<string> Names { get; } = new ObservableCollection<string>();
 
-        public void GetNames()
+        public void Initialize()
         {
             switch (_asyncMethod)
             {
@@ -163,11 +143,6 @@
         }
     }
 
-    public interface INameService
-    {
-        Task<IEnumerable<string>> GetNames();
-    }
-
     public class NameService : INameService
     {
         public async Task<IEnumerable<string>> GetNames()
@@ -183,17 +158,6 @@
         {
             await base.GetNames();
             throw new Exception("BOOM!");
-        }
-    }
-
-    public static class ObservableCollectionExtensions
-    {
-        public static void AddRange<T>(this ObservableCollection<T> collection, IEnumerable<T> items)
-        {
-            foreach (var item in items)
-            {
-                collection.Add(item);
-            }
         }
     }
 }
