@@ -19,7 +19,9 @@
                 return;
             }
 
-            var asyncMethod = AsyncMethod.OnScheduler;
+            var asyncMethod = AsyncMethod.OnSchedulerHandleErrors;
+            asyncMethod = AsyncMethod.OnScheduler;
+            //asyncMethod = AsyncMethod.OnSchedulerNoErrorHandling;
             //asyncMethod = AsyncMethod.NoAwait;
             //asyncMethod = AsyncMethod.OnWorkerThread;
             //asyncMethod = AsyncMethod.Synchronous;
@@ -45,7 +47,9 @@
         Synchronous,
         NoAwait,
         OnWorkerThread,
-        OnScheduler
+        OnScheduler,
+        OnSchedulerHandleErrors,
+        OnSchedulerNoErrorHandling
     }
 
     public interface IMainWindowViewModel
@@ -84,10 +88,17 @@
                 case AsyncMethod.OnScheduler:
                     GetNamesAsynchronouslyAndObserveOnScheduler();
                     break;
+                case AsyncMethod.OnSchedulerHandleErrors:
+                    GetNamesAsynchronouslyAndObserveOnSchedulerWhilstHandlingErrors();
+                    break;
+                case AsyncMethod.OnSchedulerNoErrorHandling:
+                    GetNamesAsynchronouslyAndObserveOnSchedulerWithNoErrorHandling();
+                    break;
                 case AsyncMethod.OnWorkerThread:
                     GetNamesAsynchronouslyAndObserveOnWorkerScheduler();
                     break;
                 case AsyncMethod.NoAwait:
+                    // Not awaiting the result updates the UI, but exceptions are not handled.
                     GetNamesAsync();
                     break;
                 case AsyncMethod.Synchronous:
@@ -108,14 +119,7 @@
 
         private async Task GetNamesAsync()
         {
-            var nameService = _service as NameService;
-
-            IEnumerable<string> names = new[] {$"Expected service to be {nameof(NameService)} - it was not."};
-            if (nameService != null)
-            {
-                // Not awaiting the result updates the UI, but exceptions are not handled.
-                names = await nameService.GetNamesResultInError();
-            }
+            var names = await GetNamesFromBrokenNameService();
             Names.AddRange(names);
         }
 
@@ -125,11 +129,37 @@
             Observable.FromAsync(() => _service.GetNames()).Subscribe(Names.AddRange);
         }
 
+        private void GetNamesAsynchronouslyAndObserveOnSchedulerWithNoErrorHandling()
+        {
+            Observable.FromAsync(GetNamesFromBrokenNameService).ObserveOn(_scheduler).Subscribe(Names.AddRange);
+        }
+
         #endregion
 
         private void GetNamesAsynchronouslyAndObserveOnScheduler()
         {
             Observable.FromAsync(() => _service.GetNames()).ObserveOn(_scheduler).Subscribe(Names.AddRange);
+        }
+
+        private void GetNamesAsynchronouslyAndObserveOnSchedulerWhilstHandlingErrors()
+        {
+            Observable.FromAsync(GetNamesFromBrokenNameService).ObserveOn(_scheduler).Subscribe(Names.AddRange, ex =>
+            {
+                Names.Add(ex.ToString());
+            });
+        }
+
+        private async Task<IEnumerable<string>> GetNamesFromBrokenNameService()
+        {
+            var nameService = GetBrokenNameService();
+            var names = await nameService.GetNames();
+            return names;
+        }
+
+        private INameService GetBrokenNameService()
+        {
+            INameService nameService = _service as BrokenNameService ?? new BrokenNameService();
+            return nameService;
         }
     }
 
@@ -140,16 +170,19 @@
 
     public class NameService : INameService
     {
-        public async Task<IEnumerable<string>> GetNamesResultInError()
-        {
-            await ((INameService) this).GetNames();
-            throw new Exception("BOOM!");
-        }
-
-        async Task<IEnumerable<string>> INameService.GetNames()
+        public async Task<IEnumerable<string>> GetNames()
         {
             await Task.Delay(TimeSpan.FromSeconds(5));
             return new[] {"Hello", "World"};
+        }
+    }
+
+    public class BrokenNameService : NameService, INameService
+    {
+        async Task<IEnumerable<string>> INameService.GetNames()
+        {
+            await base.GetNames();
+            throw new Exception("BOOM!");
         }
     }
 
